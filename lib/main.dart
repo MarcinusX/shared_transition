@@ -35,6 +35,11 @@ List<String> images = [
   'nature.jpg'
 ];
 
+List gridKeys =
+    List.generate(images.length, (i) => RectGetter.createGlobalKey());
+List pageKeys =
+    List.generate(images.length, (i) => RectGetter.createGlobalKey());
+
 class MyHomePage extends StatefulWidget {
   MyHomePage({Key key}) : super(key: key);
 
@@ -49,6 +54,8 @@ class _MyHomePageState extends State<MyHomePage>
   AnimationController _animationController;
   bool showGriView = true;
   OverlayEntry currentOverlayEntry;
+
+  int get currentIndex => _pageController.page.round();
 
   @override
   void initState() {
@@ -124,10 +131,11 @@ class _MyHomePageState extends State<MyHomePage>
           itemCount: images.length,
           controller: _pageController,
           itemBuilder: (context, index) {
-            return PageImage(
-              key: Key(images[index]),
-              rectKey: RectGetter.createGlobalKey(),
-              imageName: images[index],
+            return Center(
+              child: RectGetter(
+                key: pageKeys[index],
+                child: Image.asset("assets/${images[index]}"),
+              ),
             );
           },
         ),
@@ -140,13 +148,15 @@ class _MyHomePageState extends State<MyHomePage>
       controller: _scrollController,
       crossAxisCount: 2,
       children: images.map((imageName) {
+        int index = images.indexOf(imageName);
         return GestureDetector(
-          onTap: () => _showPageView(images.indexOf(imageName)),
+          onTap: () => _showPageView(index),
           child: Card(
-            child: GridImage(
-              key: Key(imageName),
-              rectKey: RectGetter.createGlobalKey(),
-              imageName: imageName,
+            child: Center(
+              child: RectGetter(
+                key: gridKeys[index],
+                child: Image.asset("assets/$imageName"),
+              ),
             ),
           ),
         );
@@ -161,22 +171,8 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   void _startTransition(bool toPageView) {
-    Rect gridRect;
-    Rect pageRect;
-    String currentImage = images[_pageController.page.round()];
-    void visitor(Element el) {
-      if (el.widget is GridImage &&
-          (el.widget as GridImage).key == Key(currentImage)) {
-        gridRect = RectGetter.getRectFromKey((el.widget as GridImage).rectKey);
-      }
-      if (el.widget is PageImage &&
-          (el.widget as PageImage).key == Key(currentImage)) {
-        pageRect = RectGetter.getRectFromKey((el.widget as PageImage).rectKey);
-      }
-      el.visitChildElements(visitor);
-    }
-
-    context.visitChildElements(visitor);
+    Rect gridRect = RectGetter.getRectFromKey(gridKeys[currentIndex]);
+    Rect pageRect = RectGetter.getRectFromKey(pageKeys[currentIndex]);
 
     Animation<Rect> animation =
         RectTween(begin: gridRect, end: pageRect).animate(_animationController);
@@ -188,7 +184,7 @@ class _MyHomePageState extends State<MyHomePage>
               top: animation.value.top,
               left: animation.value.left,
               child: Image.asset(
-                "assets/$currentImage",
+                "assets/${images[currentIndex]}",
                 height: animation.value.height,
                 width: animation.value.width,
               ),
@@ -209,47 +205,5 @@ class _MyHomePageState extends State<MyHomePage>
     _pageController.jumpToPage(index);
     await Future.delayed(Duration(milliseconds: 100), () {});
     _startTransition(true);
-  }
-}
-
-class PageImage extends StatefulWidget {
-  final String imageName;
-  final GlobalKey rectKey;
-
-  const PageImage({Key key, this.imageName, this.rectKey}) : super(key: key);
-
-  @override
-  _PageImageState createState() => _PageImageState();
-}
-
-class _PageImageState extends State<PageImage> {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-        child: RectGetter(
-            key: widget.rectKey,
-            child: Image.asset("assets/${widget.imageName}")));
-  }
-}
-
-class GridImage extends StatefulWidget {
-  final String imageName;
-  final GlobalKey rectKey;
-
-  const GridImage({Key key, this.imageName, this.rectKey}) : super(key: key);
-
-  @override
-  _GridImageState createState() => _GridImageState();
-}
-
-class _GridImageState extends State<GridImage> {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: RectGetter(
-        key: widget.rectKey,
-        child: Image.asset("assets/${widget.imageName}"),
-      ),
-    );
   }
 }
