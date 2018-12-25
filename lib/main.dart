@@ -52,10 +52,12 @@ class _MyHomePageState extends State<MyHomePage>
   PageController _pageController = PageController();
   ScrollController _scrollController = ScrollController();
   AnimationController _animationController;
-  bool showGriView = true;
+  Animation<Rect> rectAnimation;
   OverlayEntry currentOverlayEntry;
 
   int get currentIndex => _pageController.page.round();
+
+  bool get isPageViewVisible => _animationController.isCompleted;
 
   @override
   void initState() {
@@ -67,13 +69,8 @@ class _MyHomePageState extends State<MyHomePage>
           status == AnimationStatus.dismissed) {
         currentOverlayEntry?.remove();
       }
-      if (status == AnimationStatus.completed) {
-        setState(() => showGriView = false);
-      }
-      if (status == AnimationStatus.reverse) {
-        setState(() => showGriView = true);
-      }
     });
+    currentOverlayEntry = _initOverlay();
   }
 
   _scrollToIndex(int index) {
@@ -81,21 +78,25 @@ class _MyHomePageState extends State<MyHomePage>
     double cardHeight = deviceWidth / 2;
     double target = index ~/ 2 * cardHeight;
     target = target - cardHeight; //to center it
-    _scrollController.jumpTo(math.max(
+    _scrollController.jumpTo(
+      math.max(
         _scrollController.position.minScrollExtent,
-        math.min(target, _scrollController.position.maxScrollExtent)));
+        math.min(
+          target,
+          _scrollController.position.maxScrollExtent,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        if (showGriView) {
-          return true;
-        } else {
+        if (isPageViewVisible) {
           _showGridView();
-          return false;
         }
+        return !isPageViewVisible;
       },
       child: Scaffold(
         appBar: AppBar(
@@ -104,17 +105,7 @@ class _MyHomePageState extends State<MyHomePage>
         body: Stack(
           children: <Widget>[
             _buildGridView(),
-            AnimatedBuilder(
-              animation: _animationController,
-              builder: (context, child) => _animationController.isDismissed
-                  ? Container()
-                  : Positioned.fill(
-                      child: Opacity(
-                        opacity: _animationController.value,
-                        child: Container(color: Colors.white),
-                      ),
-                    ),
-            ),
+            _buildWhiteCurtain(),
             _buildPageView(),
           ],
         ),
@@ -122,23 +113,45 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  AnimatedBuilder _buildWhiteCurtain() {
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return _animationController.isDismissed
+            ? Container()
+            : Positioned.fill(
+                child: Opacity(
+                  opacity: _animationController.value,
+                  child: Container(color: Colors.white),
+                ),
+              );
+      },
+    );
+  }
+
   Widget _buildPageView() {
-    return Opacity(
-      opacity: showGriView ? 0 : 1,
-      child: IgnorePointer(
-        ignoring: showGriView,
-        child: PageView.builder(
-          itemCount: images.length,
-          controller: _pageController,
-          itemBuilder: (context, index) {
-            return Center(
-              child: RectGetter(
-                key: pageKeys[index],
-                child: Image.asset("assets/${images[index]}"),
-              ),
-            );
-          },
-        ),
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return Opacity(
+          opacity: isPageViewVisible ? 1 : 0,
+          child: IgnorePointer(
+            ignoring: !isPageViewVisible,
+            child: child,
+          ),
+        );
+      },
+      child: PageView.builder(
+        itemCount: images.length,
+        controller: _pageController,
+        itemBuilder: (context, index) {
+          return Center(
+            child: RectGetter(
+              key: pageKeys[index],
+              child: Image.asset("assets/${images[index]}"),
+            ),
+          );
+        },
       ),
     );
   }
@@ -170,27 +183,18 @@ class _MyHomePageState extends State<MyHomePage>
     _startTransition(false);
   }
 
+  _showPageView(int index) async {
+    _pageController.jumpToPage(index);
+    await Future.delayed(Duration(milliseconds: 100));
+    _startTransition(true);
+  }
+
   void _startTransition(bool toPageView) {
     Rect gridRect = RectGetter.getRectFromKey(gridKeys[currentIndex]);
     Rect pageRect = RectGetter.getRectFromKey(pageKeys[currentIndex]);
 
-    Animation<Rect> animation =
+    rectAnimation =
         RectTween(begin: gridRect, end: pageRect).animate(_animationController);
-
-    currentOverlayEntry = OverlayEntry(builder: (context) {
-      return AnimatedBuilder(
-        animation: _animationController,
-        builder: (context, child) => Positioned(
-              top: animation.value.top,
-              left: animation.value.left,
-              child: Image.asset(
-                "assets/${images[currentIndex]}",
-                height: animation.value.height,
-                width: animation.value.width,
-              ),
-            ),
-      );
-    });
 
     Overlay.of(context).insert(currentOverlayEntry);
 
@@ -201,9 +205,24 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
-  _showPageView(int index) async {
-    _pageController.jumpToPage(index);
-    await Future.delayed(Duration(milliseconds: 100), () {});
-    _startTransition(true);
+  OverlayEntry _initOverlay() {
+    return OverlayEntry(
+      builder: (context) {
+        return AnimatedBuilder(
+          animation: rectAnimation,
+          builder: (context, child) {
+            return Positioned(
+              top: rectAnimation.value.top,
+              left: rectAnimation.value.left,
+              child: Image.asset(
+                "assets/${images[currentIndex]}",
+                height: rectAnimation.value.height,
+                width: rectAnimation.value.width,
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }
